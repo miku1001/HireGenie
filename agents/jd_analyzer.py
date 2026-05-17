@@ -46,7 +46,7 @@ def parse_jd_output(raw: str) -> dict:
         "tone": ""
     }
 
-    for i, line in enumerate(lines):
+    for line in lines:
         if line.startswith("REQUIRED_SKILLS:"):
             output["required_skills"] = [s.strip() for s in line.replace("REQUIRED_SKILLS:", "").split(",")]
         elif line.startswith("NICE_TO_HAVE:"):
