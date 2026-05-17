@@ -2,8 +2,18 @@ from langchain_core.output_parsers import StrOutputParser
 from utils.llm import load_llm
 from langchain_core.prompts import PromptTemplate
 
+from utils.cache import cache, get_text_hash
+
+
 #analyze job description
 def jd_analyze(jd_text: str) -> dict:
+  
+  key = f"jd_{get_text_hash(jd_text)}"
+
+  if key in cache:
+        print(">>> JD cache hit!")
+        return cache[key]
+  
   llm = load_llm()
 
   prompt = PromptTemplate(
@@ -11,27 +21,24 @@ def jd_analyze(jd_text: str) -> dict:
     template ="""You are an expert job description analyzer.
 
 Given the job description below, extract the following:
-1. Required technical skills (as a comma-separated list)
-2. Nice-to-have skills (as a comma-separated list)
-3. Key responsibilities (as a bullet list, max 5)
-4. Tone of the company (e.g. startup, corporate, casual, formal)
-
 Job Description:
 {jd_text}
 
 Respond in this exact format:
-REQUIRED_SKILLS: ...
-NICE_TO_HAVE: ...
+REQUIRED_SKILLS: (, seperated)
+NICE_TO_HAVE: (, seperated)
 RESPONSIBILITIES:
 - ...
 - ...
-TONE: ...
+TONE: (e.g. startup, corporate, casual, formal)
 """
   )
 
   chain = prompt | llm | StrOutputParser()
   result = chain.invoke({"jd_text": jd_text})
-  return parse_jd_output(result)
+  parsed = parse_jd_output(result)
+  cache.set(key, parsed, expire=43200)
+  return parsed
 
 
 

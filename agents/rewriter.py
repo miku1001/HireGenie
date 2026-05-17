@@ -4,154 +4,194 @@ from utils.llm import load_llm
 
 
 def rewrite_resume(resume_data: dict, jd_data: dict, match_data: dict) -> dict:
+    result = rewrite_all(resume_data, jd_data, match_data)
     return {
-        "summary": rewrite_summary(resume_data, jd_data),
-        "experience": rewrite_experience(resume_data, jd_data, match_data),
-        "projects": rewrite_projects(resume_data, jd_data),
+        "summary": result["summary"],
+        "experience": result["experience"],
+        "projects": result["projects"],
     }
 
 
-def rewrite_summary(resume_data: dict, jd_data: dict) -> str:
+def rewrite_all(resume_data: dict, jd_data: dict, match_data: dict) -> dict:
     llm = load_llm()
 
+    experience_text = _format_experience(resume_data["structured"]["experience"])
+    projects_text = _format_projects(resume_data["structured"]["projects"])
+
     prompt = PromptTemplate(
-        input_variables=["name", "skills", "responsibilities", "tone"],
+        input_variables=[
+            "name", "skills", "jd_skills",
+            "matched_skills", "jd_tone", "jd_responsibilities",
+            "experience", "projects"
+        ],
         template="""
-You are an expert resume writer.
+You are an ATS-focused resume writer. Rewrite the resume below to align with the target job.
 
-Write a 3-sentence professional summary for a resume.
+CANDIDATE: {name}
+SKILLS: {skills}
 
-Candidate info:
-- Name: {name}
-- Skills: {skills}
-
-Target job context:
-- Key responsibilities: {responsibilities}
-- Company tone: {tone}
+JD_SKILLS: {jd_skills}
+JD_MATCHED: {matched_skills}
+JD_TONE: {jd_tone}
+JD_RESPONSIBILITIES:
+{jd_responsibilities}
 
 Rules:
-- Do NOT fabricate experience or skills the candidate does not have
-- Use keywords from the job responsibilities naturally
-- Match the tone of the company
-- Be concise and impactful
-- Do not start with "I"
+- Do NOT invent skills or experience not in the original
+- Use strong action verbs
+- Add metrics where implied
+- Match company tone
+- Each bullet starts with "-"
 
-Return only the summary paragraph, nothing else.
+---
+
+Rewrite the SUMMARY (3 sentences, do not start with "I"):
+CURRENT SKILLS: {skills}
+
+Rewrite each EXPERIENCE bullet (keep same count):
+{experience}
+
+Rewrite each PROJECT bullet (keep same count):
+{projects}
+
+---
+
+Respond in this EXACT format:
+
+SUMMARY:
+(rewritten summary here)
+
+EXPERIENCE:
+[1]
+- bullet
+[2]
+- bullet
+- bullet
+
+PROJECTS:
+[1]
+- bullet
+[2]
+- bullet
 """
     )
 
     chain = prompt | llm | StrOutputParser()
-    return chain.invoke({
+
+    print(">>> Rewriting resume (1 LLM call)...")
+
+    raw = chain.invoke({
         "name": resume_data["structured"]["name"],
         "skills": ", ".join(resume_data["structured"]["skills"]),
-        "responsibilities": "\n".join(jd_data["responsibilities"]),
-        "tone": jd_data["tone"]
+        "jd_skills": ", ".join(jd_data["required_skills"]),
+        "matched_skills": ", ".join(match_data["matched"]),
+        "jd_tone": jd_data["tone"],
+        "jd_responsibilities": "\n".join(jd_data["responsibilities"]),
+        "experience": experience_text,
+        "projects": projects_text,
     })
 
-
-def rewrite_experience(resume_data: dict, jd_data: dict, match_data: dict) -> list:
-    llm = load_llm()
-    rewritten_experience = []
-
-    prompt = PromptTemplate(
-        input_variables=["job_title", "company", "duration", "bullets", "jd_skills", "matched_skills"],
-        template="""
-You are an expert resume writer specializing in ATS optimization.
-
-Rewrite the bullet points for this work experience to better align with the target job.
-
-Current experience:
-- Job Title: {job_title}
-- Company: {company}
-- Duration: {duration}
-- Current bullets:
-{bullets}
-
-Target job context:
-- Required skills: {jd_skills}
-- Skills this candidate already matched: {matched_skills}
-
-Rules:
-- Keep the same number of bullet points
-- Do NOT invent responsibilities or tools not mentioned in the original
-- Naturally incorporate matched skills where relevant
-- Use strong action verbs (Built, Engineered, Designed, Implemented, etc.)
-- Add metrics/impact where implied (e.g. "improved performance" → "improved performance by ~X%")
-- Each bullet must start with "-"
-
-Return only the rewritten bullet points, nothing else.
-"""
+    return _parse_rewrite_output(
+        raw=raw,
+        original_experience=resume_data["structured"]["experience"],
+        original_projects=resume_data["structured"]["projects"]
     )
 
-    chain = prompt | llm | StrOutputParser()
-    print("Rewriting Experience...")
-    for job in resume_data["structured"]["experience"]:
-        bullets_text = "\n".join([f"- {b}" for b in job["bullets"]])
 
-        result = chain.invoke({
-            "job_title": job["title"],
-            "company": job["company"],
-            "duration": job["duration"],
-            "bullets": bullets_text,
-            "jd_skills": ", ".join(jd_data["required_skills"]),
-            "matched_skills": ", ".join(match_data["matched"])
+def _format_experience(experience: list) -> str:
+    lines = []
+    for i, job in enumerate(experience, 1):
+        lines.append(f"[{i}] {job['title']} @ {job['company']} | {job['duration']}")
+        for bullet in job["bullets"]:
+            lines.append(f"- {bullet}")
+        lines.append("")
+    return "\n".join(lines)
+
+
+def _format_projects(projects: list) -> str:
+    lines = []
+    for i, project in enumerate(projects, 1):
+        lines.append(f"[{i}] {project['name']} | {project['tech']}")
+        for bullet in project["bullets"]:
+            lines.append(f"- {bullet}")
+        lines.append("")
+    return "\n".join(lines)
+
+
+def _parse_rewrite_output(raw: str, original_experience: list, original_projects: list) -> dict:
+    result = {
+        "summary": "",
+        "experience": [],
+        "projects": []
+    }
+
+    current_section = None
+    current_index = None
+    current_bullets = []
+
+    lines = raw.strip().split("\n")
+
+    for line in lines:
+        line = line.strip()
+
+        if line == "SUMMARY:":
+            current_section = "summary"
+            continue
+
+        elif line == "EXPERIENCE:":
+            current_section = "experience"
+            continue
+
+        elif line == "PROJECTS:":
+            if current_section == "experience" and current_index is not None:
+                _save_experience(result, original_experience, current_index, current_bullets)
+            current_section = "projects"
+            current_index = None
+            current_bullets = []
+            continue
+
+        elif line.startswith("[") and line.endswith("]"):
+            if current_index is not None:
+                if current_section == "experience":
+                    _save_experience(result, original_experience, current_index, current_bullets)
+                elif current_section == "projects":
+                    _save_project(result, original_projects, current_index, current_bullets)
+
+            current_index = int(line[1:-1]) - 1
+            current_bullets = []
+            continue
+
+        if current_section == "summary" and line:
+            result["summary"] += line + " "
+
+        elif line.startswith("-") and current_index is not None:
+            current_bullets.append(line[1:].strip())
+
+    # save last item
+    if current_index is not None:
+        if current_section == "experience":
+            _save_experience(result, original_experience, current_index, current_bullets)
+        elif current_section == "projects":
+            _save_project(result, original_projects, current_index, current_bullets)
+
+    result["summary"] = result["summary"].strip()
+    return result
+
+
+def _save_experience(result: dict, original: list, index: int, bullets: list):
+    if index < len(original):
+        result["experience"].append({
+            "title": original[index]["title"],
+            "company": original[index]["company"],
+            "duration": original[index]["duration"],
+            "bullets": bullets
         })
 
-        rewritten_experience.append({
-            "title": job["title"],
-            "company": job["company"],
-            "duration": job["duration"],
-            "bullets": [b.strip() for b in result.strip().split("\n") if b.strip()]
+
+def _save_project(result: dict, original: list, index: int, bullets: list):
+    if index < len(original):
+        result["projects"].append({
+            "name": original[index]["name"],
+            "tech": original[index]["tech"],
+            "bullets": bullets
         })
-
-    return rewritten_experience
-
-
-def rewrite_projects(resume_data: dict, jd_data: dict) -> list:
-    llm = load_llm()
-    rewritten_projects = []
-
-    prompt = PromptTemplate(
-        input_variables=["project_name", "tech", "bullets", "jd_skills"],
-        template="""
-You are an expert resume writer.
-
-Rewrite the bullet points for this project to better highlight relevance to the target job.
-
-Project:
-- Name: {project_name}
-- Tech stack: {tech}
-- Current bullets:
-{bullets}
-
-Target job required skills: {jd_skills}
-
-Rules:
-- Do NOT invent features or technologies not in the original
-- Highlight technical decisions and impact
-- Use strong action verbs
-- Each bullet must start with "-"
-
-Return only the rewritten bullet points, nothing else.
-"""
-    )
-
-    chain = prompt | llm | StrOutputParser()
-    print("Rewriting Projects...")
-    for project in resume_data["structured"]["projects"]:
-        bullets_text = "\n".join([f"- {b}" for b in project["bullets"]])
-
-        result = chain.invoke({
-            "project_name": project["name"],
-            "tech": project["tech"],
-            "bullets": bullets_text,
-            "jd_skills": ", ".join(jd_data["required_skills"])
-        })
-
-        rewritten_projects.append({
-            "name": project["name"],
-            "tech": project["tech"],
-            "bullets": [b.strip() for b in result.strip().split("\n") if b.strip()]
-        })
-
-    return rewritten_projects

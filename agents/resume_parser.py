@@ -3,22 +3,30 @@ from utils.llm import load_llm
 from langchain_core.prompts import PromptTemplate
 from utils.file_upload import pdf_extract_text
 
+from utils.cache import cache, get_file_hash
+
+
 #parse resume
 def parse_resume(pdf_file) -> dict:
-  raw_text = pdf_extract_text(pdf_file)
-  llm = load_llm()
+    if isinstance(pdf_file, str):
+        with open(pdf_file, "rb") as handle:
+            file_hash = get_file_hash(handle)
+    else:
+        file_hash = get_file_hash(pdf_file)
 
-  prompt = PromptTemplate(
+    key = f"resume_{file_hash}"
+
+    if key in cache:
+     print(">>> Resume cache hit!")
+     return cache[key]
+    raw_text = pdf_extract_text(pdf_file)
+    llm = load_llm()
+
+    prompt = PromptTemplate(
     input_variables=["resume_text"],
     template ="""You are an expert resume parser.
 
 Given the resume below, extract and structure the following sections:
-1. Full name
-2. Skills (comma-separated)
-3. Work experience (each job: title, company, duration, bullet points)
-4. Projects (each project: name, tech stack, bullet points)
-5. Education (degree, school, year)
-
 Job Description:
 {resume_text}
 
@@ -28,7 +36,6 @@ SKILLS: ...
 EXPERIENCE:
 - TITLE: ... | COMPANY: ... | DURATION: ...
   - bullet point
-  - bullet point
 PROJECTS:
 - NAME: ... | TECH: ...(STRICTLY SEPERATE TECH using ,)
   - bullet point
@@ -36,11 +43,12 @@ EDUCATION: COURSE: ... | SCHOOL: ... | DURATION: ...
 """
   )
 
-  chain = prompt | llm | StrOutputParser()
-  result = chain.invoke({"resume_text": raw_text})
-  return {
-        "structured": parse_resume_output(result)
-    } 
+    chain = prompt | llm | StrOutputParser()
+    result = chain.invoke({"resume_text": raw_text})
+
+    parsed = {"structured": parse_resume_output(result)}
+    cache.set(key, parsed, expire=86400)  # 24 hours
+    return parsed
 
 #parse jd result
 def parse_resume_output(raw: str) -> dict:

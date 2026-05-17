@@ -2,125 +2,113 @@ from langchain_core.prompts import PromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from utils.llm import load_llm
 
-def review(rewritten_data: dict, jd_data: dict, match_data: dict) -> dict:
-  scores = score_resume(rewritten_data, jd_data)
 
-  return {
+def review(rewritten_data: dict, jd_data: dict, match_data: dict) -> dict:
+    raw_result = review_all(rewritten_data, jd_data, match_data)
+    scores = raw_result["scores"]
+
+    return {
         "scores": scores,
-        "suggestions": suggest(rewritten_data, jd_data, match_data),
+        "suggestions": raw_result["suggestions"],
         "overall_score": calculate_overall_score(scores),
         "approved": is_approved(scores)
     }
 
-def score_resume(rewritten_data: dict, jd_data: dict) -> dict:
-  llm = load_llm()
 
-  prompt = PromptTemplate(
-        input_variables=["summary", "experience_bullets", "jd_skills", "jd_tone"],
-        template="""
-You are an ATS (Applicant Tracking System) expert and senior recruiter.
-
-Evaluate this resume content against the job requirements.
-
-Resume Summary:
-{summary}
-
-Experience Bullets:
-{experience_bullets}
-
-Job Required Skills: {jd_skills}
-Company Tone: {jd_tone}
-
-Score each category from 0-100:
-1. ATS_SCORE: How well does it match ATS keyword requirements?
-2. CLARITY_SCORE: Are the bullet points clear and impactful?
-3. TONE_SCORE: Does the writing match the company tone?
-4. KEYWORD_SCORE: Are JD keywords naturally incorporated?
-
-Respond in this exact format:
-ATS_SCORE: (number)
-CLARITY_SCORE: (number)
-TONE_SCORE: (number)
-KEYWORD_SCORE: (number)
-"""
-    )
-  
-  all_bullets = []
-  for job in rewritten_data["experience"]:
-      for bullet in job["bullets"]:
-          all_bullets.append(bullet)
-
-  chain = prompt | llm | StrOutputParser()
-  result = chain.invoke({
-        "summary": rewritten_data["summary"],
-        "experience_bullets": "\n".join(all_bullets),
-        "jd_skills": ", ".join(jd_data["required_skills"]),
-        "jd_tone": jd_data["tone"]
-  })
-
-  return parse_scores(result)
-
-def parse_scores(raw: str) -> dict: 
-   lines = raw.strip().split('\n')
-   scores = {
-      "ats": 0,
-      "clarity": 0,
-      "tone": 0,
-      "keyword": 0
-   }
-
-   for line in lines:
-      line = line.strip()
-      try:
-          if line.startswith("ATS_SCORE:"):
-              scores["ats"] = int(line.replace("ATS_SCORE:", "").strip())
-          elif line.startswith("CLARITY_SCORE:"):
-              scores["clarity"] = int(line.replace("CLARITY_SCORE:", "").strip())
-          elif line.startswith("TONE_SCORE:"):
-              scores["tone"] = int(line.replace("TONE_SCORE:", "").strip())
-          elif line.startswith("KEYWORD_SCORE:"):
-              scores["keyword"] = int(line.replace("KEYWORD_SCORE:", "").strip())
-      except ValueError:
-          pass
-
-   return scores
-
-def suggest(rewritten_data: dict, jd_data: dict, match_data: dict) -> list:
+def review_all(rewritten_data: dict, jd_data: dict, match_data: dict) -> dict:
     llm = load_llm()
 
+    all_bullets = []
+    for job in rewritten_data["experience"]:
+        for bullet in job["bullets"]:
+            all_bullets.append(f"- {bullet}")
+
     prompt = PromptTemplate(
-        input_variables=["summary", "missing_skills", "jd_responsibilities"],
+        input_variables=[
+            "summary", "bullets",
+            "jd_skills", "jd_tone",
+            "missing_skills", "jd_responsibilities"
+        ],
         template="""
-You are a professional resume coach.
+You are an ATS expert and resume coach. Evaluate and give feedback.
 
-Review this resume summary and identify specific improvements.
+SUMMARY: {summary}
+BULLETS:
+{bullets}
+JD_SKILLS: {jd_skills}
+JD_TONE: {jd_tone}
+MISSING: {missing_skills}
+RESPONSIBILITIES:
+{jd_responsibilities}
 
-Summary: {summary}
+Respond in this EXACT format:
 
-Skills still missing from resume: {missing_skills}
-Job key responsibilities: {jd_responsibilities}
-
-Give 3-5 specific, actionable suggestions to improve the resume.
-
-Rules:
-- Be specific, not generic (not "improve your bullets" but "add metrics to your FastAPI bullet")
-- Focus on what's missing or weak
-- Each suggestion must start with "-"
-
-Return only the suggestions, nothing else.
+ATS_SCORE: (0-100)
+CLARITY_SCORE: (0-100)
+TONE_SCORE: (0-100)
+KEYWORD_SCORE: (0-100)
+SUGGESTIONS:
+- (specific suggestion)
+- (specific suggestion)
+- (specific suggestion)
 """
     )
 
     chain = prompt | llm | StrOutputParser()
 
-    result = chain.invoke({
+    print(">>> Reviewing resume (1 LLM call)...")
+
+    raw = chain.invoke({
         "summary": rewritten_data["summary"],
+        "bullets": "\n".join(all_bullets),
+        "jd_skills": ", ".join(jd_data["required_skills"]),
+        "jd_tone": jd_data["tone"],
         "missing_skills": ", ".join(match_data["missing"]),
         "jd_responsibilities": "\n".join(jd_data["responsibilities"])
     })
 
-    return [s.strip() for s in result.strip().split("\n") if s.strip().startswith("-")]
-   
+    return _parse_review_output(raw)
+
+
+def _parse_review_output(raw: str) -> dict:
+    lines = raw.strip().split("\n")
+
+    result = {
+        "scores": {
+            "ats": 0,
+            "clarity": 0,
+            "tone": 0,
+            "keyword": 0
+        },
+        "suggestions": []
+    }
+
+    current_section = None
+
+    for line in lines:
+        line = line.strip()
+        if not line:
+            continue
+
+        try:
+            if line.startswith("ATS_SCORE:"):
+                result["scores"]["ats"] = int(line.replace("ATS_SCORE:", "").strip())
+            elif line.startswith("CLARITY_SCORE:"):
+                result["scores"]["clarity"] = int(line.replace("CLARITY_SCORE:", "").strip())
+            elif line.startswith("TONE_SCORE:"):
+                result["scores"]["tone"] = int(line.replace("TONE_SCORE:", "").strip())
+            elif line.startswith("KEYWORD_SCORE:"):
+                result["scores"]["keyword"] = int(line.replace("KEYWORD_SCORE:", "").strip())
+            elif line == "SUGGESTIONS:":
+                current_section = "suggestions"
+            elif line.startswith("-") and current_section == "suggestions":
+                result["suggestions"].append(line[1:].strip())
+        except ValueError:
+            pass
+
+    return result
+
+
 def calculate_overall_score(scores: dict) -> int:
     weights = {
         "ats": 0.4,
