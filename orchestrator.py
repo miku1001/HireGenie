@@ -27,6 +27,9 @@ class ResumeState(TypedDict):
   final_output: Optional[dict]
 
 # NODES
+def start_node(state: ResumeState) -> dict:
+  return {}
+
 def jd_analyzer_node(state: ResumeState) -> dict:
   #read jd
   jd_text = state['jd_text']
@@ -114,6 +117,7 @@ def build_graph():
    graph = StateGraph(ResumeState)
 
    #add all nodes
+   graph.add_node("start_node", start_node)
    graph.add_node("jd_analyzer_node", jd_analyzer_node)
    graph.add_node("parse_resume_node", parse_resume_node)
    graph.add_node("skills_matcher_node", skills_matcher_node)
@@ -122,10 +126,12 @@ def build_graph():
    graph.add_node("final_output_node", final_output_node)
 
    #condition
-   graph.set_entry_point("jd_analyzer_node")
+   graph.set_entry_point("start_node")
 
    #normal edges
-   graph.add_edge("jd_analyzer_node", "parse_resume_node")
+   graph.add_edge("start_node", "jd_analyzer_node")
+   graph.add_edge("start_node", "parse_resume_node")
+   graph.add_edge("jd_analyzer_node", "skills_matcher_node")
    graph.add_edge("parse_resume_node", "skills_matcher_node")
    graph.add_edge("skills_matcher_node", "rewrite_resume_node")
    graph.add_edge("rewrite_resume_node", "review_scores_node")
