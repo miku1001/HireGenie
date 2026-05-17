@@ -138,7 +138,6 @@ def build_graph():
    graph.add_edge("final_output_node", END)
 
    #conditional edges
-
    graph.add_conditional_edges(
       "review_scores_node",
       should_retry,
@@ -167,6 +166,11 @@ def run_pipeline(resume_file, jd_text: str):
     "approved": False,
     "final_output": None
     }
-  
-   result = app.invoke(initial_state)
-   return result["final_output"]
+
+   final_output = None
+   for update in app.stream(initial_state):
+     print(update)
+     if "final_output_node" in update:
+      final_output = update["final_output_node"]["final_output"]
+
+   return final_output
