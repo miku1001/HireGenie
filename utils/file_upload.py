@@ -8,4 +8,5 @@ def pdf_extract_text(pdf_file) -> str:
       if page_text:
         text += page_text + "\n"
     
+  print("Processing PDF...")
   return text.strip()

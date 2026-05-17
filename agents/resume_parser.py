@@ -37,10 +37,9 @@ EDUCATION: COURSE: ... | SCHOOL: ... | DURATION: ...
   )
 
   chain = prompt | llm | StrOutputParser()
+  print("Parsing Resume...")
   result = chain.invoke({"resume_text": raw_text})
   return {
-        "raw_text": raw_text,
-        "ai_result": result,
         "structured": parse_resume_output(result)
     } 
 
@@ -105,5 +104,3 @@ def parse_resume_output(raw: str) -> dict:
             project_current_item['bullets'].append(line.replace("- ", "" ).strip())
 
     return output
-
-print(parse_resume('ref.pdf'))

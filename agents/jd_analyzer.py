@@ -30,8 +30,8 @@ TONE: ...
   )
 
   chain = prompt | llm | StrOutputParser()
+  print("Parsing Job Description...")
   result = chain.invoke({"jd_text": jd_text})
-  print(result)
   return parse_jd_output(result)
 
 
