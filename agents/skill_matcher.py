@@ -69,6 +69,3 @@ def parse_match_output(raw:str) -> dict:
         output["match_score"] = 0
 
   return output
-
-
-  
