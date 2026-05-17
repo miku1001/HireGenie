@@ -41,7 +41,6 @@ Return only the summary paragraph, nothing else.
     )
 
     chain = prompt | llm | StrOutputParser()
-    print("Rewriting Summary...")
     return chain.invoke({
         "name": resume_data["structured"]["name"],
         "skills": ", ".join(resume_data["structured"]["skills"]),

@@ -9,7 +9,7 @@ def match_skills(jd_data: dict, resume_data: dict) -> dict:
   resume_skills = ', '.join(resume_data['structured']['skills'])
 
   prompt = PromptTemplate(
-    input_variables = ['job_skills', 'resume_skills'],
+    input_variables = ['jd_skills', 'resume_skills'],
     template = """
 You are an expert technical recruiter comparing a candidate's skills to a job description.
 
@@ -29,7 +29,6 @@ MATCH_SCORE: (a number from 0-100 representing overall match percentage)
 """
   )
   chain = prompt | llm | StrOutputParser()
-  print("Matching Skills...")
   result = chain.invoke({'jd_skills': job_skills, 'resume_skills': resume_skills})
 
   return parse_match_output(result)

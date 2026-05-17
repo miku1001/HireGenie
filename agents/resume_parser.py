@@ -37,7 +37,6 @@ EDUCATION: COURSE: ... | SCHOOL: ... | DURATION: ...
   )
 
   chain = prompt | llm | StrOutputParser()
-  print("Parsing Resume...")
   result = chain.invoke({"resume_text": raw_text})
   return {
         "structured": parse_resume_output(result)
