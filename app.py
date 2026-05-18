@@ -2,7 +2,7 @@ import streamlit as st
 from orchestrator import run_pipeline
 
 st.set_page_config(
-    page_title="ResumeAI — Tailor Your Resume",
+    page_title="HireGenie — Tailor Your Resume",
     page_icon="📄",
     layout="wide",
     initial_sidebar_state="expanded"
