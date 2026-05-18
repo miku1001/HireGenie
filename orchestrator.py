@@ -86,7 +86,7 @@ def review_scores_node(state: ResumeState) -> dict:
 
 #Pipeline's final return
 def final_output_node(state: ResumeState) -> dict:
-    print(">>> Pipeline complete!")
+    print("Pipeline complete!")
     return {
         "final_output": {
             "rewritten": state["rewritten_data"],
@@ -102,13 +102,13 @@ def should_retry(state: ResumeState) -> str:
     retry_count = state["retry_count"]
 
     if approved:
-        print(">>> Approved! Moving to final output.")
+        print("Approved! Moving to final output.")
         return "approved"
     elif retry_count >= 2:
-        print(">>> Max retries reached. Moving to final output anyway.")
+        print("Max retries reached. Moving to final output anyway.")
         return "max_retries_reached"
     else:
-        print(f">>> Not approved. Retrying... (attempt {retry_count})")
+        print(f"Not approved. Retrying... (attempt {retry_count})")
         return "retry"
 
 
@@ -151,7 +151,7 @@ def build_graph():
    return graph.compile()
 
 #pipeline entry point
-def run_pipeline(resume_file, jd_text: str):
+def run_pipeline(resume_file, jd_text: str, status_callback=None):
    app = build_graph()
 
    initial_state = {
@@ -166,11 +166,27 @@ def run_pipeline(resume_file, jd_text: str):
     "approved": False,
     "final_output": None
     }
+   
+  # map node name → display message
+   node_messages = {
+        "jd_analyzer_node":    "🔍 Analyzing job description...",
+        "parse_resume_node":   "📄 Parsing resume...",
+        "skills_matcher_node": "🎯 Matching skills...",
+        "rewrite_resume_node": "✍️  Rewriting resume sections...",
+        "review_scores_node":  "✅ Reviewing quality...",
+        "final_output_node":   "📦 Assembling final output...",
+    }
 
    final_output = None
+
    for update in app.stream(initial_state):
-     print(update)
-     if "final_output_node" in update:
-      final_output = update["final_output_node"]["final_output"]
+        node_name = list(update.keys())[0]
+
+        # i-call ang callback kung may nakalagay
+        if status_callback and node_name in node_messages:
+            status_callback(node_messages[node_name])
+
+        if "final_output_node" in update:
+            final_output = update["final_output_node"]["final_output"]
 
    return final_output

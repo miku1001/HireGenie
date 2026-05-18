@@ -36,7 +36,7 @@ JD_TONE: {jd_tone}
 JD_RESPONSIBILITIES:
 {jd_responsibilities}
 
-Rules:
+STRICTLY FOLLOW Rules:
 - Do NOT invent skills or experience not in the original
 - Use strong action verbs
 - Add metrics where implied
