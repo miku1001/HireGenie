@@ -249,10 +249,7 @@ with st.sidebar:
     st.markdown("""
     <div style='padding: 0.5rem 0 1.5rem'>
         <div style='font-family: Syne, sans-serif; font-size: 1.4rem; font-weight: 800; color: #e8e8f0;'>
-            Resume<span style='color: #6c63ff;'>AI</span>
-        </div>
-        <div style='font-size: 0.8rem; color: #6b7280; margin-top: 0.3rem;'>
-            Powered by LangGraph + OpenRouter
+            Hire<span style='color: #6c63ff;'>Genie </span>
         </div>
     </div>
     """, unsafe_allow_html=True)
