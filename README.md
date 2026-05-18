@@ -176,8 +176,6 @@ Cache is keyed by MD5 hash of file/text content — same resume uploaded twice h
 **Ted Paulo A. Feranil**
 BS Computer Engineering — Major in AI/ML, PUP Manila
 
-[LinkedIn](https://linkedin.com/in/yourprofile) · [GitHub](https://github.com/yourusername)
-
 ---
 
 ## License
