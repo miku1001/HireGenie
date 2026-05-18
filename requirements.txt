@@ -5,3 +5,4 @@ langgraph
 pdfplumber
 python-dotenv
 diskcache
+langchain-openrouter
